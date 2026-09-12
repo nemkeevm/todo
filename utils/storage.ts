@@ -1,8 +1,11 @@
 import type { Note, StoredDraft, StoredNotes } from '~/types/note'
 
 const NOTES_KEY = 'todo:notes'
-const DRAFT_KEY = 'todo:draft'
+const DRAFT_KEY_PREFIX = 'todo:draft:'
+const LEGACY_DRAFT_KEY = 'todo:draft'
 const isBrowser = (): boolean => typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+
+const draftKey = (noteId: string): string => `${DRAFT_KEY_PREFIX}${noteId}`
 
 function read<T>(key: string): T | null {
   if (!isBrowser()) return null
@@ -29,17 +32,27 @@ export function saveNotes(notes: Note[]): void {
   if (isBrowser()) localStorage.setItem(NOTES_KEY, JSON.stringify({ version: 1, notes } satisfies StoredNotes))
 }
 
-export function loadDraft(): StoredDraft | null {
-  const draft = read<StoredDraft>(DRAFT_KEY)
-  return draft?.version === 1 && draft.noteId === draft.note?.id && isNote(draft.note) && typeof draft.savedAt === 'string' ? draft : null
+function isDraft(value: StoredDraft | null, noteId: string): value is StoredDraft {
+  return value?.version === 1 && value.noteId === noteId && value.noteId === value.note?.id && isNote(value.note) && typeof value.savedAt === 'string'
+}
+
+export function loadDraft(noteId: string): StoredDraft | null {
+  const stored = read<StoredDraft>(draftKey(noteId))
+  if (isDraft(stored, noteId)) return stored
+
+  const legacy = read<StoredDraft>(LEGACY_DRAFT_KEY)
+  if (!isDraft(legacy, noteId)) return null
+  saveDraft(legacy)
+  if (isBrowser()) localStorage.removeItem(LEGACY_DRAFT_KEY)
+  return legacy
 }
 
 export function saveDraft(draft: StoredDraft): void {
-  if (isBrowser()) localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  if (isBrowser()) localStorage.setItem(draftKey(draft.noteId), JSON.stringify(draft))
 }
 
-export function clearDraft(): void {
-  if (isBrowser()) localStorage.removeItem(DRAFT_KEY)
+export function clearDraft(noteId: string): void {
+  if (isBrowser()) localStorage.removeItem(draftKey(noteId))
 }
 
-export const storageKeys = { NOTES_KEY, DRAFT_KEY }
+export const storageKeys = { NOTES_KEY, LEGACY_DRAFT_KEY, draftKey }

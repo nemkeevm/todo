@@ -27,13 +27,33 @@ describe('browser storage', () => {
 
   it('persists and clears a valid editing draft', () => {
     saveDraft({ version: 1, noteId: note.id, note, savedAt: '2026-01-01T00:01:00.000Z' })
-    expect(loadDraft()?.note.title).toBe('План')
-    clearDraft()
-    expect(loadDraft()).toBeNull()
+    expect(loadDraft(note.id)?.note.title).toBe('План')
+    clearDraft(note.id)
+    expect(loadDraft(note.id)).toBeNull()
   })
 
   it('rejects a draft belonging to a different note', () => {
-    localStorage.setItem(storageKeys.DRAFT_KEY, JSON.stringify({ version: 1, noteId: 'other', note, savedAt: '2026-01-01T00:01:00.000Z' }))
-    expect(loadDraft()).toBeNull()
+    localStorage.setItem(storageKeys.draftKey('other'), JSON.stringify({ version: 1, noteId: 'other', note, savedAt: '2026-01-01T00:01:00.000Z' }))
+    expect(loadDraft(note.id)).toBeNull()
+  })
+
+  it('keeps independent drafts for different notes', () => {
+    const second = { ...note, id: 'n2', title: 'Вторая заметка' }
+    saveDraft({ version: 1, noteId: note.id, note, savedAt: '2026-01-01T00:01:00.000Z' })
+    saveDraft({ version: 1, noteId: second.id, note: second, savedAt: '2026-01-01T00:02:00.000Z' })
+
+    expect(loadDraft(note.id)?.note.title).toBe('План')
+    expect(loadDraft(second.id)?.note.title).toBe('Вторая заметка')
+    clearDraft(note.id)
+    expect(loadDraft(second.id)).not.toBeNull()
+  })
+
+  it('migrates a matching legacy draft once', () => {
+    const legacy = { version: 1 as const, noteId: note.id, note, savedAt: '2026-01-01T00:01:00.000Z' }
+    localStorage.setItem(storageKeys.LEGACY_DRAFT_KEY, JSON.stringify(legacy))
+
+    expect(loadDraft(note.id)).toEqual(legacy)
+    expect(localStorage.getItem(storageKeys.LEGACY_DRAFT_KEY)).toBeNull()
+    expect(localStorage.getItem(storageKeys.draftKey(note.id))).not.toBeNull()
   })
 })

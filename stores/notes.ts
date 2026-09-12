@@ -6,8 +6,6 @@ import { cloneNote, newNote, newTodo } from '~/utils/note'
 import { clearDraft, loadDraft, loadNotes, saveDraft, saveNotes, storageKeys } from '~/utils/storage'
 
 const TEXT_IDLE_MS = 650
-let draftTimer: ReturnType<typeof setTimeout> | undefined
-let textTimer: ReturnType<typeof setTimeout> | undefined
 
 function isSameTextTarget(left: Change, right: Change): boolean {
   return left.type === right.type
@@ -19,6 +17,8 @@ export const useNotesStore = defineStore('notes', () => {
   const hydrated = ref(false)
   const editing = ref<EditingSession | null>(null)
   const pendingText = ref<Change | null>(null)
+  let draftTimer: ReturnType<typeof setTimeout> | undefined
+  let textTimer: ReturnType<typeof setTimeout> | undefined
 
   const sortedNotes = computed(() => [...notes.value].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
   const canUndo = computed(() => Boolean(editing.value?.undoStack.length))
@@ -92,11 +92,12 @@ export const useNotesStore = defineStore('notes', () => {
   function deleteNote(noteId: string): void {
     notes.value = notes.value.filter((note) => note.id !== noteId)
     persistNotes()
+    clearDraft(noteId)
     if (editing.value?.noteId === noteId) cancelEditing()
   }
 
   function draftFor(noteId: string): Note | null {
-    const draft = loadDraft()
+    const draft = loadDraft(noteId)
     return draft?.noteId === noteId ? cloneNote(draft.note) : null
   }
 
@@ -170,9 +171,10 @@ export const useNotesStore = defineStore('notes', () => {
   function cancelEditing(): void {
     clearTimeout(textTimer)
     clearTimeout(draftTimer)
+    const noteId = editing.value?.noteId
     editing.value = null
     pendingText.value = null
-    clearDraft()
+    if (noteId) clearDraft(noteId)
   }
 
   return {
